@@ -1,0 +1,50 @@
+name: Build RTL8720dn-Deauther
+
+on:
+  push:
+    branches:
+      - main  # Trigger build when you push to main
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Arduino CLI
+      run: |
+        curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | bash
+        echo "${HOME}/bin" >> $GITHUB_PATH
+        arduino-cli version
+
+    - name: Setup Ameba Board Package
+      run: |
+        arduino-cli config init
+        arduino-cli config add board_manager.additional_urls https://github.com/ambiot/ambd_arduino/raw/master/Arduino_package/package_realtek.com_amebad_index.json
+        arduino-cli core update-index
+        arduino-cli core install realtek:AmebaD
+
+    - name: Compile firmware
+      run: |
+        arduino-cli compile --fqbn realtek:AmebaD:Ai-Thinker_BW16 --output-dir ./build .
+
+    - name: Create Git Tag
+      id: tag
+      run: |
+        TAG="v1-d-$(date +'%Y%m%d%H%M%S')"
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+        git tag $TAG
+        git push origin $TAG
+
+    - name: Upload firmware to GitHub Releases
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.tag.outputs.tag }}
+        files: ./build/*.bin
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
